@@ -1,13 +1,13 @@
 'use client';
 
 import React from 'react';
+import Image from 'next/image';
 import {
     getPlatformData,
     getContactIcon,
     renderSocialIcon,
 } from '../lib/socialIcons';
 import { ExternalLink } from 'lucide-react';
-import Image from 'next/image';
 
 const CardPreview = ({ cardData }) => {
     if (!cardData) {
@@ -30,10 +30,9 @@ const CardPreview = ({ cardData }) => {
                     <Image
                         src={bannerPicture}
                         alt="Card Banner"
+                        width={800}
+                        height={160}
                         className="w-full h-full object-cover"
-                        fill
-                        sizes="(max-width: 640px) 100vw, 100vw"
-                        priority
                     />
                 </div>
             ) : (
@@ -53,10 +52,9 @@ const CardPreview = ({ cardData }) => {
                             <Image
                                 src={profilePicture}
                                 alt="Profile"
-                                className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white shadow-lg object-cover"
                                 width={128}
                                 height={128}
-                                priority
+                                className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white shadow-lg object-cover"
                             />
                         ) : (
                             <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-100 rounded-full border-4 border-white shadow-lg flex items-center justify-center">
@@ -77,20 +75,10 @@ const CardPreview = ({ cardData }) => {
                     {(contactInfo.title || contactInfo.company) && (
                         <p className="text-sm sm:text-base text-gray-600">
                             {contactInfo.title || 'Your Title'}
-                            {contactInfo.company &&
-                                ` at ${contactInfo.company}`}
+                            {contactInfo.company && ` @ ${contactInfo.company}`}
                         </p>
                     )}
                 </div>
-
-                {/* Bio */}
-                {bio && (
-                    <div className="mb-6">
-                        <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
-                            {bio}
-                        </p>
-                    </div>
-                )}
 
                 {/* Contact Information */}
                 {(contactInfo.email ||
@@ -159,6 +147,15 @@ const CardPreview = ({ cardData }) => {
                                 </p>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* Bio */}
+                {bio && (
+                    <div className="mb-6">
+                        <p className="text-sm sm:text-base text-gray-700 leading-relaxed">
+                            {bio}
+                        </p>
                     </div>
                 )}
 

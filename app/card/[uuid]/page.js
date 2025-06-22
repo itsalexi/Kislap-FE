@@ -13,7 +13,7 @@ import { useAuth } from '../../components/AuthProvider.js';
 import LoadingSpinner from '../../components/LoadingSpinner.js';
 import ErrorPage, { ErrorTypes } from '../../components/ErrorPage';
 import { Button } from '../../components/ui/button';
-import { CreditCard, RefreshCw, ExternalLink } from 'lucide-react';
+import { CreditCard, RefreshCw, ExternalLink, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import React from 'react';
 import CardView from '../../components/CardView.js';
@@ -71,6 +71,84 @@ export default function CardPage({ params }) {
         } finally {
             setClaiming(false);
         }
+    };
+
+    const generateVCard = () => {
+        if (!fullCardData || !fullCardData.contactInfo) {
+            return;
+        }
+
+        const contact = fullCardData.contactInfo;
+        const socialLinks = fullCardData.socialLinks || [];
+        const otherLinks = fullCardData.otherLinks || [];
+
+        // Build vCard content
+        let vcard = 'BEGIN:VCARD\n';
+        vcard += 'VERSION:3.0\n';
+
+        // Name
+        if (contact.name) {
+            vcard += `FN:${contact.name}\n`;
+            vcard += `N:${contact.name};;;;\n`;
+        }
+
+        // Title and organization
+        if (contact.title || contact.company) {
+            vcard += `TITLE:${contact.title || ''}\n`;
+            vcard += `ORG:${contact.company || ''}\n`;
+        }
+
+        // Email
+        if (contact.email) {
+            vcard += `EMAIL:${contact.email}\n`;
+        }
+
+        // Phone
+        if (contact.phone) {
+            vcard += `TEL:${contact.phone}\n`;
+        }
+
+        // Address
+        if (contact.address) {
+            vcard += `ADR:;;${contact.address};;;;\n`;
+        }
+
+        // Website
+        if (contact.website) {
+            vcard += `URL:${contact.website}\n`;
+        }
+
+        // Social media URLs
+        socialLinks.forEach((link, index) => {
+            if (link.url) {
+                vcard += `URL;type=${link.platform || 'social'}:${link.url}\n`;
+            }
+        });
+
+        // Other links
+        otherLinks.forEach((link, index) => {
+            if (link.url) {
+                vcard += `URL;type=${link.title || 'link'}:${link.url}\n`;
+            }
+        });
+
+        // Bio as note
+        if (fullCardData.bio) {
+            vcard += `NOTE:${fullCardData.bio.replace(/\n/g, '\\n')}\n`;
+        }
+
+        vcard += 'END:VCARD';
+
+        // Create and download file
+        const blob = new Blob([vcard], { type: 'text/vcard' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${contact.name || 'contact'}.vcf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     if (loading || authLoading) {
@@ -158,9 +236,27 @@ export default function CardPage({ params }) {
                         </div>
                     )}
 
+                    {/* vCard Export Button - Show for all claimed cards */}
+                    {cardData.claimed && fullCardData && (
+                        <div className="flex justify-center">
+                            <Button
+                                onClick={generateVCard}
+                                variant="outline"
+                                className="flex items-center space-x-2"
+                            >
+                                <UserPlus className="h-4 w-4" />
+                                <span>Add to Contacts</span>
+                            </Button>
+                        </div>
+                    )}
+
+                    {/* Edit Button - Show only for card owner */}
                     {user &&
                         cardData.claimed &&
-                        fullCardData?.owner?.id === user.id && (
+                        ((fullCardData?.owner?.id &&
+                            fullCardData.owner.id === user.id) ||
+                            (fullCardData?.ownerId &&
+                                fullCardData.ownerId === user.id)) && (
                             <div className="flex justify-center">
                                 <Link href={`/card/${uuid}/edit`}>
                                     <Button>Edit Your Card</Button>

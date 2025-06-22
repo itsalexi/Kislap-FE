@@ -65,7 +65,7 @@ const validationSchema = Yup.object().shape({
             .max(100, 'Company must be between 1 and 100 characters'),
         email: Yup.string().email('Email must be a valid email address'),
         phone: Yup.string().matches(
-            /^[\+]?[1-9][\d]{0,15}$/,
+            /^[\+]?[0-9][\d]{0,15}$/,
             'Phone must be a valid phone number (digits only, optional + prefix)'
         ),
         website: Yup.string().url('Website must be a valid URL'),
@@ -425,7 +425,7 @@ export default function EditCardPage({ params }) {
                                 alt="Banner preview"
                                 className="w-full h-full object-cover"
                                 fill
-                                sizes="(max-width: 640px) 100vw, 100vw"
+                                sizes="(max-width: 640px) 100%, (max-width: 1024px) 50vw, 33vw"
                                 priority
                             />
                         ) : (
@@ -1005,6 +1005,33 @@ export default function EditCardPage({ params }) {
                                                         className="text-red-500 text-sm mt-1"
                                                     />
                                                 </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Bio */}
+                                        <div className="bg-white p-6 rounded-lg shadow-sm border">
+                                            <h2 className="text-lg font-semibold mb-4">
+                                                Bio
+                                            </h2>
+                                            <div>
+                                                <label
+                                                    htmlFor="bio"
+                                                    className="block text-sm font-medium text-gray-700 mb-1"
+                                                >
+                                                    About You
+                                                </label>
+                                                <Field
+                                                    as="textarea"
+                                                    name="bio"
+                                                    placeholder="Tell people about yourself, your expertise, or what you do..."
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                                    rows={4}
+                                                />
+                                                <ErrorMessage
+                                                    name="bio"
+                                                    component="div"
+                                                    className="text-red-500 text-sm mt-1"
+                                                />
                                             </div>
                                         </div>
 
