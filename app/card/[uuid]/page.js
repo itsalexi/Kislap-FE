@@ -160,7 +160,7 @@ export default function CardPage({ params }) {
 
                     {user &&
                         cardData.claimed &&
-                        fullCardData?.owner?.email === user.email && (
+                        fullCardData?.owner?.id === user.id && (
                             <div className="flex justify-center">
                                 <Link href={`/card/${uuid}/edit`}>
                                     <Button>Edit Your Card</Button>
