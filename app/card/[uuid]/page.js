@@ -20,7 +20,7 @@ import CardView from '../../components/CardView.js';
 
 export default function CardPage({ params }) {
     const { uuid } = use(params);
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, login } = useAuth();
     const [cardData, setCardData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -232,6 +232,19 @@ export default function CardPage({ params }) {
                                         ? 'Claiming...'
                                         : 'Claim This Card'}
                                 </span>
+                            </Button>
+                        </div>
+                    )}
+
+                    {/* Show Login to Claim button if user is not logged in and card is unclaimed */}
+                    {!user && !cardData.claimed && (
+                        <div className="flex justify-center">
+                            <Button
+                                onClick={login}
+                                className="flex items-center space-x-2"
+                            >
+                                <CreditCard className="h-4 w-4" />
+                                <span>Log in to Claim Card</span>
                             </Button>
                         </div>
                     )}

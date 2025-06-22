@@ -20,6 +20,11 @@ export function AuthProvider({ children }) {
             const result = await getCurrentUser();
             if (result.user) {
                 setUser(result.user);
+                const redirectPath = localStorage.getItem('redirectAfterLogin');
+                if (redirectPath) {
+                    localStorage.removeItem('redirectAfterLogin');
+                    router.push(redirectPath);
+                }
             }
         } catch (error) {
             console.error('Auth check failed:', error);
@@ -29,6 +34,10 @@ export function AuthProvider({ children }) {
     };
 
     const login = () => {
+        localStorage.setItem(
+            'redirectAfterLogin',
+            window.location.pathname + window.location.search
+        );
         const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
         if (!backendUrl) {
             console.error('NEXT_PUBLIC_BACKEND_URL is not configured');
