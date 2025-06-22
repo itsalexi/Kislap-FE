@@ -17,6 +17,7 @@ import LoadingSpinner from '../components/LoadingSpinner.js';
 import ErrorPage, { ErrorTypes } from '../components/ErrorPage';
 import { CreditCard, CheckCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 
 export default function ClaimPage() {
     const { user, loading } = useAuth();
@@ -30,25 +31,40 @@ export default function ClaimPage() {
         e.preventDefault();
 
         if (!cardUuid.trim()) {
-            setError('Please enter a card UUID');
+            toast.error('Please enter a card UUID');
             return;
         }
 
-        try {
-            setClaiming(true);
-            setError(null);
+        setClaiming(true);
 
-            const result = await claimCard(cardUuid.trim());
-            if (result.error) {
-                setError(result.error);
-            } else {
-                setSuccess(true);
-            }
-        } catch (err) {
-            setError('Failed to claim card. Please try again.');
-        } finally {
-            setClaiming(false);
-        }
+        const promise = () =>
+            new Promise(async (resolve, reject) => {
+                try {
+                    const result = await claimCard(cardUuid.trim());
+                    if (result.error) {
+                        reject(new Error(result.error));
+                    } else {
+                        resolve(result);
+                    }
+                } catch (err) {
+                    reject(
+                        new Error('Failed to claim card. Please try again.')
+                    );
+                } finally {
+                    setClaiming(false);
+                }
+            });
+
+        toast.promise(promise, {
+            loading: 'Claiming card...',
+            success: () => {
+                setTimeout(() => {
+                    router.push(`/onboarding/${cardUuid.trim()}`);
+                }, 1000);
+                return 'Card claimed! Taking you to setup...';
+            },
+            error: (err) => err.message,
+        });
     };
 
     if (loading) {

@@ -50,6 +50,11 @@ import ReactCrop, {
 import 'react-image-crop/dist/ReactCrop.css';
 import { toast } from 'sonner';
 import Image from 'next/image';
+import CardImageUploader from '../../../components/CardEditor/CardImageUploader.js';
+import ContactInfoForm from '../../../components/CardEditor/ContactInfoForm.js';
+import BioForm from '../../../components/CardEditor/BioForm.js';
+import SocialLinksForm from '../../../components/CardEditor/SocialLinksForm.js';
+import OtherLinksForm from '../../../components/CardEditor/OtherLinksForm.js';
 
 // Validation schema
 const validationSchema = Yup.object().shape({
@@ -57,25 +62,26 @@ const validationSchema = Yup.object().shape({
         name: Yup.string()
             .min(1, 'Name must be between 1 and 100 characters')
             .max(100, 'Name must be between 1 and 100 characters'),
-        title: Yup.string()
-            .min(1, 'Title must be between 1 and 100 characters')
-            .max(100, 'Title must be between 1 and 100 characters'),
-        company: Yup.string()
-            .min(1, 'Company must be between 1 and 100 characters')
-            .max(100, 'Company must be between 1 and 100 characters'),
+        title: Yup.string().max(
+            100,
+            'Title must be between 1 and 100 characters'
+        ),
+        company: Yup.string().max(
+            100,
+            'Company must be between 1 and 100 characters'
+        ),
         email: Yup.string().email('Email must be a valid email address'),
         phone: Yup.string().matches(
-            /^[\+]?[0-9][\d]{0,15}$/,
+            /^(|[\+]?[0-9][\d]{0,15})$/,
             'Phone must be a valid phone number (digits only, optional + prefix)'
         ),
         website: Yup.string().url('Website must be a valid URL'),
-        address: Yup.string()
-            .min(1, 'Address must be between 1 and 200 characters')
-            .max(200, 'Address must be between 1 and 200 characters'),
+        address: Yup.string().max(
+            200,
+            'Address must be between 1 and 200 characters'
+        ),
     }),
-    bio: Yup.string()
-        .min(1, 'Bio must be between 1 and 1000 characters')
-        .max(1000, 'Bio must be between 1 and 1000 characters'),
+    bio: Yup.string().max(1000, 'Bio must be between 1 and 1000 characters'),
     socialLinks: Yup.array()
         .of(
             Yup.object().shape({
@@ -241,12 +247,32 @@ export default function EditCardPage({ params }) {
     const router = useRouter();
     const [cardData, setCardData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
     const [error, setError] = useState(null);
 
     // Drag and drop state
     const [draggedItem, setDraggedItem] = useState(null);
     const [draggedType, setDraggedType] = useState(null);
+
+    // Helper to create safe initial values
+    const getSafeInitialValues = (data) => {
+        const contactInfo = data?.contactInfo || {};
+        return {
+            profilePicture: data?.profilePicture || null,
+            bannerPicture: data?.bannerPicture || null,
+            contactInfo: {
+                name: contactInfo.name || '',
+                title: contactInfo.title || '',
+                company: contactInfo.company || '',
+                email: contactInfo.email || '',
+                phone: contactInfo.phone || '',
+                website: contactInfo.website || '',
+                address: contactInfo.address || '',
+            },
+            bio: data?.bio || '',
+            socialLinks: data?.socialLinks || [],
+            otherLinks: data?.otherLinks || [],
+        };
+    };
 
     useEffect(() => {
         if (!authLoading && user) {
@@ -268,7 +294,6 @@ export default function EditCardPage({ params }) {
                 const card = result.card;
                 setCardData(card);
 
-                // Check if user owns this card
                 if (card.owner?.id !== user.id) {
                     setError('You do not have permission to edit this card');
                     return;
@@ -281,357 +306,6 @@ export default function EditCardPage({ params }) {
         } finally {
             setLoading(false);
         }
-    };
-
-    // This component is defined inside EditCardPage to have access to its state and props,
-    // particularly the Formik `setFieldValue` function.
-    const CardImageUploader = ({ values, setFieldValue }) => {
-        const [isBannerUploading, setBannerUploading] = useState(false);
-        const [isProfileUploading, setProfileUploading] = useState(false);
-        const [error, setError] = useState({ banner: null, profile: null });
-        const [cropConfig, setCropConfig] = useState(null);
-
-        const MAX_FILE_SIZE_MB = 5;
-        const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-
-        const bannerInputRef = React.useRef(null);
-        const profileInputRef = React.useRef(null);
-
-        const handleFileSelect = (e, type) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            if (file.size > MAX_FILE_SIZE_BYTES) {
-                setError((prev) => ({
-                    ...prev,
-                    [type]: `File too large. Max is ${MAX_FILE_SIZE_MB}MB.`,
-                }));
-                return;
-            }
-
-            const reader = new FileReader();
-            reader.onload = () => {
-                setCropConfig({
-                    src: reader.result?.toString() || '',
-                    type: type,
-                    aspect: type === 'banner' ? 3 / 1 : 1,
-                    circularCrop: type === 'profile',
-                });
-            };
-            reader.readAsDataURL(file);
-        };
-
-        const handleUploadCroppedImage = async (croppedFile) => {
-            const type = cropConfig.type;
-            const isBanner = type === 'banner';
-            const field = isBanner ? 'bannerPicture' : 'profilePicture';
-            const setLoading = isBanner
-                ? setBannerUploading
-                : setProfileUploading;
-            const originalValue = cardData[field];
-
-            setLoading(true);
-            setError((prev) => ({ ...prev, [type]: null }));
-
-            try {
-                const formData = new FormData();
-                formData.append(field, croppedFile);
-                const uploadFn = isBanner
-                    ? uploadCardBannerPicture
-                    : uploadCardProfilePicture;
-                const result = await uploadFn(uuid, formData);
-                if (result.error) throw new Error(result.error);
-
-                // Update the card data locally instead of reloading
-                setCardData((prev) => ({
-                    ...prev,
-                    [field]: result[field] || result.url || result.imageUrl,
-                }));
-
-                // Update the form field value with the actual URL
-                const imageUrl = result[field] || result.url || result.imageUrl;
-                setFieldValue(field, imageUrl);
-
-                toast.success('Image uploaded successfully!');
-            } catch (err) {
-                const errorMessage =
-                    err.message || 'An unexpected error occurred.';
-                setError((prev) => ({ ...prev, [type]: errorMessage }));
-                setFieldValue(field, originalValue);
-                toast.error(errorMessage);
-            } finally {
-                setLoading(false);
-                setCropConfig(null);
-            }
-        };
-
-        const handleRemove = async (type) => {
-            const isBanner = type === 'banner';
-            const field = isBanner ? 'bannerPicture' : 'profilePicture';
-            const setLoading = isBanner
-                ? setBannerUploading
-                : setProfileUploading;
-            const originalValue = cardData[field];
-
-            setLoading(true);
-            setError((prev) => ({ ...prev, [type]: null }));
-
-            try {
-                const deleteFn = isBanner
-                    ? deleteCardBannerPicture
-                    : deleteCardProfilePicture;
-                const result = await deleteFn(uuid);
-                if (result.error) throw new Error(result.error);
-
-                // Update the card data locally instead of reloading
-                setCardData((prev) => ({
-                    ...prev,
-                    [field]: null,
-                }));
-
-                // Update the form field value
-                setFieldValue(field, null);
-
-                toast.success('Image removed successfully!');
-            } catch (err) {
-                const errorMessage =
-                    err.message || 'An unexpected error occurred.';
-                setError((prev) => ({ ...prev, [type]: errorMessage }));
-                setFieldValue(field, originalValue); // Revert on error
-                toast.error(errorMessage);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        const getImageUrl = (fieldValue) => {
-            if (!fieldValue) return null;
-            return fieldValue instanceof File
-                ? URL.createObjectURL(fieldValue)
-                : fieldValue;
-        };
-
-        const bannerUrl = getImageUrl(values.bannerPicture);
-        const profileUrl = getImageUrl(values.profilePicture);
-
-        return (
-            <div className="bg-white p-6 rounded-lg shadow-sm border space-y-4">
-                <h2 className="text-lg font-semibold">Card Images</h2>
-                <div className="relative">
-                    <div className="relative group w-full aspect-[3/1] bg-gray-100 rounded-md overflow-hidden">
-                        {bannerUrl ? (
-                            <Image
-                                src={bannerUrl}
-                                alt="Banner preview"
-                                className="w-full h-full object-cover"
-                                fill
-                                sizes="(max-width: 640px) 100%, (max-width: 1024px) 50vw, 33vw"
-                                priority
-                            />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center text-gray-500">
-                                <span>Banner Image</span>
-                            </div>
-                        )}
-                        <div
-                            className="absolute inset-0 bg-transparent group-hover:bg-black/50 flex items-center justify-center transition-all cursor-pointer"
-                            onClick={() => bannerInputRef.current.click()}
-                        >
-                            <div className="text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
-                                {isBannerUploading ? (
-                                    <LoadingSpinner />
-                                ) : (
-                                    <>
-                                        <Upload className="h-5 w-5" />
-                                        <span>Update Banner</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        {bannerUrl && !isBannerUploading && (
-                            <button
-                                type="button"
-                                onClick={() => handleRemove('banner')}
-                                className="absolute top-2 right-2 bg-black/50 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        )}
-                        <input
-                            type="file"
-                            ref={bannerInputRef}
-                            className="hidden"
-                            accept="image/jpeg, image/png, image/gif, image/webp"
-                            onChange={(e) => handleFileSelect(e, 'banner')}
-                        />
-                    </div>
-                    {error.banner && (
-                        <p className="text-sm text-red-500 mt-2">
-                            {error.banner}
-                        </p>
-                    )}
-
-                    <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-white shadow-lg group">
-                        <div className="w-full h-full rounded-full bg-gray-100 overflow-hidden">
-                            {profileUrl ? (
-                                <Image
-                                    src={profileUrl}
-                                    alt="Profile preview"
-                                    className="w-full h-full object-cover"
-                                    width={112}
-                                    height={112}
-                                    priority
-                                />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                    <User className="h-10 w-10 text-gray-400" />
-                                </div>
-                            )}
-                        </div>
-                        <div
-                            className="absolute inset-0 bg-transparent group-hover:bg-black/60 flex items-center justify-center transition-all cursor-pointer rounded-full"
-                            onClick={() => profileInputRef.current.click()}
-                        >
-                            <div className="text-white opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 text-center">
-                                {isProfileUploading ? (
-                                    <LoadingSpinner />
-                                ) : (
-                                    <>
-                                        <Upload className="h-5 w-5" />
-                                        <span className="text-xs">Update</span>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                        {profileUrl && !isProfileUploading && (
-                            <button
-                                type="button"
-                                onClick={() => handleRemove('profile')}
-                                className="absolute top-1 right-1 bg-black/50 p-1 rounded-full text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        )}
-                        <input
-                            type="file"
-                            ref={profileInputRef}
-                            className="hidden"
-                            accept="image/jpeg, image/png, image/gif, image/webp"
-                            onChange={(e) => handleFileSelect(e, 'profile')}
-                        />
-                    </div>
-                </div>
-                {error.profile && (
-                    <p className="text-sm text-red-500 mt-14 text-center">
-                        {error.profile}
-                    </p>
-                )}
-                <p className="text-xs text-gray-500 pt-12 text-center">
-                    Max file size: {MAX_FILE_SIZE_MB}MB. Hover over images to
-                    update.
-                </p>
-                {cropConfig && (
-                    <ImageCropModal
-                        isOpen={!!cropConfig}
-                        onClose={() => setCropConfig(null)}
-                        imageSrc={cropConfig.src}
-                        onCropComplete={handleUploadCroppedImage}
-                        aspect={cropConfig.aspect}
-                        circularCrop={cropConfig.circularCrop}
-                    />
-                )}
-            </div>
-        );
-    };
-
-    // Custom dropdown component for platform selection
-    const PlatformDropdown = ({ field, form, ...props }) => {
-        const { name, value, onBlur } = field;
-        const { errors, touched } = form;
-        const error = errors.socialLinks?.[name.split('.')[1]]?.platform;
-        const isTouched = touched.socialLinks?.[name.split('.')[1]]?.platform;
-
-        const [isOpen, setIsOpen] = useState(false);
-        const [searchTerm, setSearchTerm] = useState('');
-
-        const selectedPlatform = SOCIAL_PLATFORMS.find(
-            (p) => p.value === value
-        );
-        const filteredPlatforms = SOCIAL_PLATFORMS.filter((p) =>
-            p.label.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-
-        return (
-            <div className="relative">
-                <div
-                    className={`flex items-center justify-between w-full px-3 py-2 border rounded-md cursor-pointer ${
-                        error && isTouched
-                            ? 'border-red-500'
-                            : 'border-gray-300'
-                    } hover:border-gray-400 focus:border-blue-500 focus:outline-none`}
-                    onClick={() => setIsOpen(!isOpen)}
-                    onBlur={onBlur}
-                >
-                    <div className="flex items-center space-x-2">
-                        {selectedPlatform ? (
-                            <>
-                                {renderSocialIcon(selectedPlatform.value, {
-                                    className: 'h-4 w-4',
-                                })}
-                                <span>{selectedPlatform.label}</span>
-                            </>
-                        ) : (
-                            <span className="text-gray-500">
-                                Select platform...
-                            </span>
-                        )}
-                    </div>
-                    <ChevronDown
-                        className={`h-4 w-4 transition-transform ${
-                            isOpen ? 'rotate-180' : ''
-                        }`}
-                    />
-                </div>
-
-                {isOpen && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                        <div className="p-2 border-b">
-                            <input
-                                type="text"
-                                placeholder="Search platforms..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                        </div>
-                        <div className="py-1">
-                            {filteredPlatforms.map((platform) => (
-                                <div
-                                    key={platform.value}
-                                    className="flex items-center space-x-2 px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                                    onClick={() => {
-                                        form.setFieldValue(
-                                            name,
-                                            platform.value
-                                        );
-                                        setIsOpen(false);
-                                        setSearchTerm('');
-                                    }}
-                                >
-                                    {renderSocialIcon(platform.value, {
-                                        className: 'h-4 w-4',
-                                    })}
-                                    <span className="text-sm">
-                                        {platform.label}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
     };
 
     // Drag and drop handlers
@@ -655,21 +329,8 @@ export default function EditCardPage({ params }) {
         const updated = [...values[listKey]];
         const [moved] = updated.splice(draggedItem, 1);
 
-        // Validate the moved item before inserting it back
-        if (moved && typeof moved === 'object') {
-            if (
-                type === 'social' &&
-                moved.platform !== undefined &&
-                moved.url !== undefined
-            ) {
-                updated.splice(dropIndex, 0, moved);
-            } else if (
-                type === 'other' &&
-                moved.title !== undefined &&
-                moved.url !== undefined
-            ) {
-                updated.splice(dropIndex, 0, moved);
-            }
+        if (moved) {
+            updated.splice(dropIndex, 0, moved);
         }
 
         setFieldValue(listKey, updated);
@@ -686,31 +347,39 @@ export default function EditCardPage({ params }) {
         const promise = () =>
             new Promise(async (resolve, reject) => {
                 try {
-                    const { contactInfo, bio, socialLinks, otherLinks } =
-                        values;
+                    // Create a deep copy to rebuild the payload safely
+                    const {
+                        contactInfo,
+                        bio,
+                        socialLinks,
+                        otherLinks,
+                        profilePicture,
+                        bannerPicture,
+                    } = JSON.parse(JSON.stringify(values));
 
-                    // Prepare and add text data update
-                    const cleanContactInfo = {};
-                    Object.entries(contactInfo).forEach(([key, value]) => {
-                        if (
-                            value &&
-                            typeof value === 'string' &&
-                            value.trim()
-                        ) {
-                            cleanContactInfo[key] = value.trim();
-                        } else if (value) {
-                            cleanContactInfo[key] = value;
+                    const payload = {};
+
+                    // Add top-level fields if they have a value
+                    if (bio) payload.bio = bio;
+                    if (profilePicture) payload.profilePicture = profilePicture;
+                    if (bannerPicture) payload.bannerPicture = bannerPicture;
+                    if (socialLinks) payload.socialLinks = socialLinks;
+                    if (otherLinks) payload.otherLinks = otherLinks;
+
+                    // Clean and add contactInfo
+                    const cleanContact = {};
+                    if (contactInfo) {
+                        Object.keys(contactInfo).forEach((key) => {
+                            if (contactInfo[key]) {
+                                cleanContact[key] = contactInfo[key];
+                            }
+                        });
+                        if (Object.keys(cleanContact).length > 0) {
+                            payload.contactInfo = cleanContact;
                         }
-                    });
+                    }
 
-                    const updatePayload = {
-                        contactInfo: cleanContactInfo,
-                        bio: bio.trim() || undefined,
-                        socialLinks: socialLinks,
-                        otherLinks: otherLinks,
-                    };
-
-                    const result = await updateCard(uuid, updatePayload);
+                    const result = await updateCard(uuid, payload);
 
                     if (result.error) {
                         throw new Error(
@@ -774,54 +443,24 @@ export default function EditCardPage({ params }) {
         );
     }
 
+    const initialValues = getSafeInitialValues(cardData);
+
     return (
         <Formik
-            initialValues={{
-                contactInfo: {
-                    name: cardData.contactInfo?.name || '',
-                    title: cardData.contactInfo?.title || '',
-                    company: cardData.contactInfo?.company || '',
-                    email: cardData.contactInfo?.email || '',
-                    phone: cardData.contactInfo?.phone || '',
-                    website: cardData.contactInfo?.website || '',
-                    address: cardData.contactInfo?.address || '',
-                },
-                bio: cardData.bio || '',
-                socialLinks: Array.isArray(cardData.socialLinks)
-                    ? cardData.socialLinks.filter(
-                          (link) =>
-                              link &&
-                              typeof link === 'object' &&
-                              typeof link.platform === 'string' &&
-                              typeof link.url === 'string'
-                      )
-                    : [],
-                otherLinks: Array.isArray(cardData.otherLinks)
-                    ? cardData.otherLinks.filter(
-                          (link) =>
-                              link &&
-                              typeof link === 'object' &&
-                              typeof link.title === 'string' &&
-                              typeof link.url === 'string'
-                      )
-                    : [],
-                profilePicture: cardData.profilePicture || null,
-                bannerPicture: cardData.bannerPicture || null,
-            }}
+            initialValues={initialValues}
             validationSchema={validationSchema}
             onSubmit={handleSubmit}
             enableReinitialize
         >
-            {({ values, errors, touched, setFieldValue, isSubmitting }) => {
-                return (
-                    <Form className="flex flex-col h-screen bg-gray-50 overflow-hidden">
-                        {/* Header */}
-                        <div className="bg-white border-b flex-shrink-0">
+            {({ values, isSubmitting, setFieldValue }) => (
+                <Form>
+                    <div className="min-h-screen bg-gray-50/50">
+                        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b">
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                                 <div className="flex justify-between items-center py-4">
                                     <div className="flex items-center space-x-4">
                                         <Link
-                                            href={`/card/${uuid}`}
+                                            href="/dashboard"
                                             className="p-2 rounded-md hover:bg-gray-100"
                                         >
                                             <ArrowLeft className="h-5 w-5 text-gray-600" />
@@ -849,670 +488,50 @@ export default function EditCardPage({ params }) {
                                         </Link>
                                         <Button
                                             type="submit"
-                                            disabled={isSubmitting || saving}
+                                            disabled={isSubmitting}
                                         >
                                             <Save className="h-4 w-4 mr-2" />
-                                            {saving
+                                            {isSubmitting
                                                 ? 'Saving...'
                                                 : 'Save Changes'}
                                         </Button>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Main Content */}
-                        <div className="flex-grow max-w-7xl mx-auto w-full overflow-hidden">
-                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8 h-full">
-                                {/* Form - Left Column */}
-                                <div className="lg:col-span-2 overflow-y-auto">
-                                    <div className="p-4 sm:p-6 lg:p-8 space-y-6 pb-16">
-                                        {/* Banner and Profile Pictures */}
+                        </header>
+                        <main className="flex-1 p-4 sm:p-6 md:p-8">
+                            <div className="max-w-7xl mx-auto w-full">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-x-8">
+                                    <div className="lg:col-span-2 space-y-6">
                                         <CardImageUploader
+                                            uuid={uuid}
                                             values={values}
                                             setFieldValue={setFieldValue}
+                                            cardData={cardData}
+                                            setCardData={setCardData}
                                         />
-
-                                        {/* Contact Information */}
-                                        <div className="bg-white p-6 rounded-lg shadow-sm border">
-                                            <h2 className="text-lg font-semibold mb-4">
-                                                Contact Information
-                                            </h2>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                <div>
-                                                    <label
-                                                        htmlFor="name"
-                                                        className="block text-sm font-medium text-gray-700 mb-1"
-                                                    >
-                                                        Name
-                                                    </label>
-                                                    <Field
-                                                        as={Input}
-                                                        name="contactInfo.name"
-                                                        placeholder="Your full name"
-                                                    />
-                                                    <ErrorMessage
-                                                        name="contactInfo.name"
-                                                        component="div"
-                                                        className="text-red-500 text-sm mt-1"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label
-                                                        htmlFor="title"
-                                                        className="block text-sm font-medium text-gray-700 mb-1"
-                                                    >
-                                                        Job Title
-                                                    </label>
-                                                    <Field
-                                                        as={Input}
-                                                        name="contactInfo.title"
-                                                        placeholder="e.g., Software Engineer"
-                                                    />
-                                                    <ErrorMessage
-                                                        name="contactInfo.title"
-                                                        component="div"
-                                                        className="text-red-500 text-sm mt-1"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label
-                                                        htmlFor="company"
-                                                        className="block text-sm font-medium text-gray-700 mb-1"
-                                                    >
-                                                        Company
-                                                    </label>
-                                                    <Field
-                                                        as={Input}
-                                                        name="contactInfo.company"
-                                                        placeholder="e.g., Tech Corp"
-                                                    />
-                                                    <ErrorMessage
-                                                        name="contactInfo.company"
-                                                        component="div"
-                                                        className="text-red-500 text-sm mt-1"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label
-                                                        htmlFor="email"
-                                                        className="block text-sm font-medium text-gray-700 mb-1"
-                                                    >
-                                                        Email
-                                                    </label>
-                                                    <Field
-                                                        as={Input}
-                                                        name="contactInfo.email"
-                                                        placeholder="your.email@example.com"
-                                                    />
-                                                    <ErrorMessage
-                                                        name="contactInfo.email"
-                                                        component="div"
-                                                        className="text-red-500 text-sm mt-1"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label
-                                                        htmlFor="phone"
-                                                        className="block text-sm font-medium text-gray-700 mb-1"
-                                                    >
-                                                        Phone
-                                                    </label>
-                                                    <Field
-                                                        as={Input}
-                                                        name="contactInfo.phone"
-                                                        placeholder="+1234567890"
-                                                    />
-                                                    <ErrorMessage
-                                                        name="contactInfo.phone"
-                                                        component="div"
-                                                        className="text-red-500 text-sm mt-1"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label
-                                                        htmlFor="website"
-                                                        className="block text-sm font-medium text-gray-700 mb-1"
-                                                    >
-                                                        Website
-                                                    </label>
-                                                    <Field
-                                                        as={Input}
-                                                        name="contactInfo.website"
-                                                        placeholder="https://yourwebsite.com"
-                                                    />
-                                                    <ErrorMessage
-                                                        name="contactInfo.website"
-                                                        component="div"
-                                                        className="text-red-500 text-sm mt-1"
-                                                    />
-                                                </div>
-                                                <div className="sm:col-span-2">
-                                                    <label
-                                                        htmlFor="address"
-                                                        className="block text-sm font-medium text-gray-700 mb-1"
-                                                    >
-                                                        Address
-                                                    </label>
-                                                    <Field
-                                                        as={Input}
-                                                        name="contactInfo.address"
-                                                        placeholder="123 Main St, City, State"
-                                                    />
-                                                    <ErrorMessage
-                                                        name="contactInfo.address"
-                                                        component="div"
-                                                        className="text-red-500 text-sm mt-1"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Bio */}
-                                        <div className="bg-white p-6 rounded-lg shadow-sm border">
-                                            <h2 className="text-lg font-semibold mb-4">
-                                                Bio
-                                            </h2>
-                                            <div>
-                                                <label
-                                                    htmlFor="bio"
-                                                    className="block text-sm font-medium text-gray-700 mb-1"
-                                                >
-                                                    About You
-                                                </label>
-                                                <Field
-                                                    as="textarea"
-                                                    name="bio"
-                                                    placeholder="Tell people about yourself, your expertise, or what you do..."
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                                                    rows={4}
-                                                />
-                                                <ErrorMessage
-                                                    name="bio"
-                                                    component="div"
-                                                    className="text-red-500 text-sm mt-1"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Social Links */}
-                                        <div className="bg-white p-6 rounded-lg shadow-sm border">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h2 className="text-lg font-semibold">
-                                                    Social Links
-                                                </h2>
-                                                <span className="text-sm text-gray-500">
-                                                    ({values.socialLinks.length}{' '}
-                                                    / 5)
-                                                </span>
-                                            </div>
-
-                                            <FieldArray name="socialLinks">
-                                                {({ push, remove, move }) => {
-                                                    try {
-                                                        return (
-                                                            <div className="space-y-4">
-                                                                {values.socialLinks
-                                                                    .filter(
-                                                                        (
-                                                                            link
-                                                                        ) =>
-                                                                            link &&
-                                                                            typeof link ===
-                                                                                'object' &&
-                                                                            typeof link.platform ===
-                                                                                'string' &&
-                                                                            typeof link.url ===
-                                                                                'string'
-                                                                    )
-                                                                    .map(
-                                                                        (
-                                                                            link,
-                                                                            index
-                                                                        ) => (
-                                                                            <div
-                                                                                key={
-                                                                                    index
-                                                                                }
-                                                                                className="flex items-center space-x-2"
-                                                                                draggable
-                                                                                onDragStart={(
-                                                                                    e
-                                                                                ) =>
-                                                                                    handleDragStart(
-                                                                                        e,
-                                                                                        index,
-                                                                                        'social'
-                                                                                    )
-                                                                                }
-                                                                                onDragOver={
-                                                                                    handleDragOver
-                                                                                }
-                                                                                onDrop={(
-                                                                                    e
-                                                                                ) =>
-                                                                                    handleDrop(
-                                                                                        e,
-                                                                                        index,
-                                                                                        'social',
-                                                                                        values,
-                                                                                        setFieldValue
-                                                                                    )
-                                                                                }
-                                                                                onDragEnd={
-                                                                                    handleDragEnd
-                                                                                }
-                                                                            >
-                                                                                <GripVertical className="h-5 w-5 text-gray-400 cursor-grab hidden sm:block" />
-                                                                                <div className="flex-grow grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                                                    <div>
-                                                                                        <Field
-                                                                                            name={`socialLinks.${index}.platform`}
-                                                                                            component={
-                                                                                                PlatformDropdown
-                                                                                            }
-                                                                                        />
-                                                                                        <ErrorMessage
-                                                                                            name={`socialLinks.${index}.platform`}
-                                                                                            component="div"
-                                                                                            className="text-red-500 text-sm mt-1"
-                                                                                            render={(
-                                                                                                msg
-                                                                                            ) => (
-                                                                                                <div className="text-red-500 text-sm mt-1">
-                                                                                                    {typeof msg ===
-                                                                                                    'string'
-                                                                                                        ? msg
-                                                                                                        : 'Invalid platform'}
-                                                                                                </div>
-                                                                                            )}
-                                                                                        />
-                                                                                    </div>
-                                                                                    <div>
-                                                                                        <Field
-                                                                                            name={`socialLinks.${index}.url`}
-                                                                                        >
-                                                                                            {({
-                                                                                                field,
-                                                                                            }) => (
-                                                                                                <Input
-                                                                                                    {...field}
-                                                                                                    placeholder="https://example.com"
-                                                                                                    value={
-                                                                                                        typeof field.value ===
-                                                                                                        'string'
-                                                                                                            ? field.value
-                                                                                                            : ''
-                                                                                                    }
-                                                                                                />
-                                                                                            )}
-                                                                                        </Field>
-                                                                                        <ErrorMessage
-                                                                                            name={`socialLinks.${index}.url`}
-                                                                                            component="div"
-                                                                                            className="text-red-500 text-sm mt-1"
-                                                                                            render={(
-                                                                                                msg
-                                                                                            ) => (
-                                                                                                <div className="text-red-500 text-sm mt-1">
-                                                                                                    {typeof msg ===
-                                                                                                    'string'
-                                                                                                        ? msg
-                                                                                                        : 'Invalid URL'}
-                                                                                                </div>
-                                                                                            )}
-                                                                                        />
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div className="flex items-center">
-                                                                                    <div className="sm:hidden flex flex-col -space-y-1">
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                move(
-                                                                                                    index,
-                                                                                                    index -
-                                                                                                        1
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                index ===
-                                                                                                0
-                                                                                            }
-                                                                                            className="p-1 rounded-md text-gray-400 hover:text-gray-800 disabled:opacity-30"
-                                                                                        >
-                                                                                            <ChevronUp className="h-5 w-5" />
-                                                                                        </button>
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                move(
-                                                                                                    index,
-                                                                                                    index +
-                                                                                                        1
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                index ===
-                                                                                                values
-                                                                                                    .socialLinks
-                                                                                                    .length -
-                                                                                                    1
-                                                                                            }
-                                                                                            className="p-1 rounded-md text-gray-400 hover:text-gray-800 disabled:opacity-30"
-                                                                                        >
-                                                                                            <ChevronDown className="h-5 w-5" />
-                                                                                        </button>
-                                                                                    </div>
-                                                                                    <Button
-                                                                                        type="button"
-                                                                                        variant="ghost"
-                                                                                        onClick={() =>
-                                                                                            remove(
-                                                                                                index
-                                                                                            )
-                                                                                        }
-                                                                                        className="text-gray-500 hover:text-red-500"
-                                                                                    >
-                                                                                        <Trash2 className="h-4 w-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </div>
-                                                                        )
-                                                                    )}
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    onClick={() =>
-                                                                        push({
-                                                                            platform:
-                                                                                '',
-                                                                            url: '',
-                                                                        })
-                                                                    }
-                                                                    disabled={
-                                                                        values
-                                                                            .socialLinks
-                                                                            .length >=
-                                                                        5
-                                                                    }
-                                                                >
-                                                                    <Plus className="h-4 w-4 mr-2" />
-                                                                    Add Social
-                                                                    Link
-                                                                </Button>
-                                                                <ErrorMessage
-                                                                    name="socialLinks"
-                                                                    component="div"
-                                                                    className="text-red-500 text-sm mt-1"
-                                                                    render={(
-                                                                        msg
-                                                                    ) => (
-                                                                        <div className="text-red-500 text-sm mt-1">
-                                                                            {typeof msg ===
-                                                                            'string'
-                                                                                ? msg
-                                                                                : 'Invalid social links'}
-                                                                        </div>
-                                                                    )}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    } catch (error) {
-                                                        console.error(
-                                                            'Error rendering socialLinks:',
-                                                            error
-                                                        );
-                                                        return (
-                                                            <div className="text-red-500">
-                                                                Error rendering
-                                                                social links.
-                                                                Please refresh
-                                                                the page.
-                                                            </div>
-                                                        );
-                                                    }
-                                                }}
-                                            </FieldArray>
-                                        </div>
-
-                                        {/* Other Links */}
-                                        <div className="bg-white p-6 rounded-lg shadow-sm border">
-                                            <div className="flex justify-between items-center mb-4">
-                                                <h2 className="text-lg font-semibold">
-                                                    Other Links
-                                                </h2>
-                                            </div>
-
-                                            <FieldArray name="otherLinks">
-                                                {({ push, remove, move }) => {
-                                                    try {
-                                                        return (
-                                                            <div className="space-y-4">
-                                                                {values.otherLinks
-                                                                    .filter(
-                                                                        (
-                                                                            link
-                                                                        ) =>
-                                                                            link &&
-                                                                            typeof link ===
-                                                                                'object' &&
-                                                                            typeof link.title ===
-                                                                                'string' &&
-                                                                            typeof link.url ===
-                                                                                'string'
-                                                                    )
-                                                                    .map(
-                                                                        (
-                                                                            link,
-                                                                            index
-                                                                        ) => (
-                                                                            <div
-                                                                                key={
-                                                                                    index
-                                                                                }
-                                                                                className="flex items-center space-x-2"
-                                                                                draggable
-                                                                                onDragStart={(
-                                                                                    e
-                                                                                ) =>
-                                                                                    handleDragStart(
-                                                                                        e,
-                                                                                        index,
-                                                                                        'other'
-                                                                                    )
-                                                                                }
-                                                                                onDragOver={
-                                                                                    handleDragOver
-                                                                                }
-                                                                                onDrop={(
-                                                                                    e
-                                                                                ) =>
-                                                                                    handleDrop(
-                                                                                        e,
-                                                                                        index,
-                                                                                        'other',
-                                                                                        values,
-                                                                                        setFieldValue
-                                                                                    )
-                                                                                }
-                                                                                onDragEnd={
-                                                                                    handleDragEnd
-                                                                                }
-                                                                            >
-                                                                                <GripVertical className="h-5 w-5 text-gray-400 cursor-grab hidden sm:block" />
-                                                                                <div className="flex-grow grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                                                    <div>
-                                                                                        <Field
-                                                                                            as={
-                                                                                                Input
-                                                                                            }
-                                                                                            name={`otherLinks.${index}.title`}
-                                                                                            placeholder="Link title (e.g., My Portfolio)"
-                                                                                        />
-                                                                                        <ErrorMessage
-                                                                                            name={`otherLinks.${index}.title`}
-                                                                                            component="div"
-                                                                                            className="text-red-500 text-sm mt-1"
-                                                                                            render={(
-                                                                                                msg
-                                                                                            ) => (
-                                                                                                <div className="text-red-500 text-sm mt-1">
-                                                                                                    {typeof msg ===
-                                                                                                    'string'
-                                                                                                        ? msg
-                                                                                                        : 'Invalid title'}
-                                                                                                </div>
-                                                                                            )}
-                                                                                        />
-                                                                                    </div>
-                                                                                    <div>
-                                                                                        <Field
-                                                                                            name={`otherLinks.${index}.url`}
-                                                                                        >
-                                                                                            {({
-                                                                                                field,
-                                                                                            }) => (
-                                                                                                <Input
-                                                                                                    {...field}
-                                                                                                    placeholder="https://example.com"
-                                                                                                    value={
-                                                                                                        typeof field.value ===
-                                                                                                        'string'
-                                                                                                            ? field.value
-                                                                                                            : ''
-                                                                                                    }
-                                                                                                />
-                                                                                            )}
-                                                                                        </Field>
-                                                                                        <ErrorMessage
-                                                                                            name={`otherLinks.${index}.url`}
-                                                                                            component="div"
-                                                                                            className="text-red-500 text-sm mt-1"
-                                                                                            render={(
-                                                                                                msg
-                                                                                            ) => (
-                                                                                                <div className="text-red-500 text-sm mt-1">
-                                                                                                    {typeof msg ===
-                                                                                                    'string'
-                                                                                                        ? msg
-                                                                                                        : 'Invalid URL'}
-                                                                                                </div>
-                                                                                            )}
-                                                                                        />
-                                                                                    </div>
-                                                                                </div>
-                                                                                <div className="flex items-center">
-                                                                                    <div className="sm:hidden flex flex-col -space-y-1">
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                move(
-                                                                                                    index,
-                                                                                                    index -
-                                                                                                        1
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                index ===
-                                                                                                0
-                                                                                            }
-                                                                                            className="p-1 rounded-md text-gray-400 hover:text-gray-800 disabled:opacity-30"
-                                                                                        >
-                                                                                            <ChevronUp className="h-5 w-5" />
-                                                                                        </button>
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() =>
-                                                                                                move(
-                                                                                                    index,
-                                                                                                    index +
-                                                                                                        1
-                                                                                                )
-                                                                                            }
-                                                                                            disabled={
-                                                                                                index ===
-                                                                                                values
-                                                                                                    .otherLinks
-                                                                                                    .length -
-                                                                                                    1
-                                                                                            }
-                                                                                            className="p-1 rounded-md text-gray-400 hover:text-gray-800 disabled:opacity-30"
-                                                                                        >
-                                                                                            <ChevronDown className="h-5 w-5" />
-                                                                                        </button>
-                                                                                    </div>
-                                                                                    <Button
-                                                                                        type="button"
-                                                                                        variant="ghost"
-                                                                                        onClick={() =>
-                                                                                            remove(
-                                                                                                index
-                                                                                            )
-                                                                                        }
-                                                                                        className="text-gray-500 hover:text-red-500"
-                                                                                    >
-                                                                                        <Trash2 className="h-4 w-4" />
-                                                                                    </Button>
-                                                                                </div>
-                                                                            </div>
-                                                                        )
-                                                                    )}
-                                                                <Button
-                                                                    type="button"
-                                                                    variant="outline"
-                                                                    onClick={() =>
-                                                                        push({
-                                                                            title: '',
-                                                                            url: '',
-                                                                        })
-                                                                    }
-                                                                >
-                                                                    <Plus className="h-4 w-4 mr-2" />
-                                                                    Add Link
-                                                                </Button>
-                                                                <ErrorMessage
-                                                                    name="otherLinks"
-                                                                    component="div"
-                                                                    className="text-red-500 text-sm mt-1"
-                                                                    render={(
-                                                                        msg
-                                                                    ) => (
-                                                                        <div className="text-red-500 text-sm mt-1">
-                                                                            {typeof msg ===
-                                                                            'string'
-                                                                                ? msg
-                                                                                : 'Invalid links'}
-                                                                        </div>
-                                                                    )}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    } catch (error) {
-                                                        console.error(
-                                                            'Error rendering otherLinks:',
-                                                            error
-                                                        );
-                                                        return (
-                                                            <div className="text-red-500">
-                                                                Error rendering
-                                                                links. Please
-                                                                refresh the
-                                                                page.
-                                                            </div>
-                                                        );
-                                                    }
-                                                }}
-                                            </FieldArray>
-                                        </div>
+                                        <ContactInfoForm />
+                                        <BioForm />
+                                        <SocialLinksForm
+                                            values={values}
+                                            setFieldValue={setFieldValue}
+                                            handleDragStart={handleDragStart}
+                                            handleDragOver={handleDragOver}
+                                            handleDrop={handleDrop}
+                                            handleDragEnd={handleDragEnd}
+                                        />
+                                        <OtherLinksForm
+                                            values={values}
+                                            setFieldValue={setFieldValue}
+                                            handleDragStart={handleDragStart}
+                                            handleDragOver={handleDragOver}
+                                            handleDrop={handleDrop}
+                                            handleDragEnd={handleDragEnd}
+                                        />
                                     </div>
-                                </div>
-
-                                {/* Preview - Right Column */}
-                                <div className="lg:col-span-1 overflow-y-auto">
-                                    <div className="p-4 sm:p-6 lg:p-8">
-                                        <div className="lg:sticky lg:top-8">
-                                            <h2 className="text-lg font-semibold mb-4">
+                                    <div className="hidden lg:block">
+                                        <div className="sticky top-24 space-y-4">
+                                            <h2 className="text-lg font-semibold">
                                                 Live Preview
                                             </h2>
                                             <CardView cardData={values} />
@@ -1520,10 +539,10 @@ export default function EditCardPage({ params }) {
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </Form>
-                );
-            }}
+                        </main>
+                    </div>
+                </Form>
+            )}
         </Formik>
     );
 }

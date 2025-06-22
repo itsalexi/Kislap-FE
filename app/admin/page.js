@@ -30,29 +30,114 @@ import {
     Filter,
     RefreshCw,
     Shield,
+    Search,
+    Menu,
+    X,
 } from 'lucide-react';
 import {
     Avatar,
     AvatarFallback,
     AvatarImage,
 } from '../components/ui/avatar.jsx';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '../components/ui/table.jsx';
+import Link from 'next/link.js';
+import {
+    Home,
+    Settings,
+    ChevronLeft,
+    ChevronRight,
+    Copy,
+    MoreHorizontal,
+} from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { Badge } from '../components/ui/badge';
+
+const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen }) => {
+    const navItems = [
+        { id: 'stats', label: 'Dashboard', icon: BarChart3 },
+        { id: 'users', label: 'Users', icon: Users },
+        { id: 'cards', label: 'Cards', icon: CreditCard },
+    ];
+
+    return (
+        <>
+            {/* Mobile overlay */}
+            {isOpen && (
+                <div
+                    className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+                    onClick={() => setIsOpen(false)}
+                />
+            )}
+
+            {/* Sidebar */}
+            <aside
+                className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r transform transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+                    isOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+            >
+                <div className="flex h-16 items-center justify-between border-b px-6">
+                    <Link
+                        href="/admin"
+                        className="flex items-center gap-2 font-semibold"
+                    >
+                        <Shield className="h-6 w-6" />
+                        <span className="hidden sm:inline">Admin Panel</span>
+                        <span className="sm:hidden">Admin</span>
+                    </Link>
+                    <button
+                        onClick={() => setIsOpen(false)}
+                        className="lg:hidden p-2 hover:bg-gray-100 rounded-md"
+                    >
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+                <nav className="flex-1 space-y-2 p-4">
+                    {navItems.map((item) => (
+                        <Button
+                            key={item.id}
+                            variant={
+                                activeTab === item.id ? 'secondary' : 'ghost'
+                            }
+                            className="w-full justify-start"
+                            onClick={() => {
+                                setActiveTab(item.id);
+                                setIsOpen(false); // Close sidebar on mobile after selection
+                            }}
+                        >
+                            <item.icon className="mr-2 h-4 w-4" />
+                            {item.label}
+                        </Button>
+                    ))}
+                </nav>
+            </aside>
+        </>
+    );
+};
 
 export default function AdminDashboard() {
     const { user, loading: authLoading } = useAuth();
     const [stats, setStats] = useState(null);
     const [allCards, setAllCards] = useState([]);
     const [filteredCards, setFilteredCards] = useState([]);
-    const [users, setUsers] = useState([]);
+    const [allUsers, setAllUsers] = useState([]);
+    const [filteredUsers, setFilteredUsers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [cardsLoading, setCardsLoading] = useState(false);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState('stats');
     const [cardCount, setCardCount] = useState(10);
-    const [cardPage, setCardPage] = useState(1);
-    const [userPage, setUserPage] = useState(1);
     const [cardFilter, setCardFilter] = useState('all'); // all, claimed, unclaimed
+    const [cardSearch, setCardSearch] = useState('');
+    const [userSearch, setUserSearch] = useState('');
     const [creatingCards, setCreatingCards] = useState(false);
     const [deletingCard, setDeletingCard] = useState(null);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     useEffect(() => {
         if (!authLoading && user) {
@@ -62,53 +147,84 @@ export default function AdminDashboard() {
         }
     }, [authLoading, user]);
 
-    const loadData = async (isCardFilter = false) => {
+    useEffect(() => {
+        // Apply client-side filtering for cards
+        applyCardFilter();
+    }, [allCards, cardFilter, cardSearch]);
+
+    useEffect(() => {
+        // Apply client-side filtering for users
+        applyUserFilter();
+    }, [allUsers, userSearch]);
+
+    const loadData = async () => {
         try {
-            if (isCardFilter) {
-                setCardsLoading(true);
-            } else {
-                setLoading(true);
-            }
+            setLoading(true);
             setError(null);
 
             const [statsData, cardsData, usersData] = await Promise.all([
                 getAdminStats(),
-                getAdminCards(cardPage, 100), // Get more cards, no filtering
-                getAdminUsers(userPage, 20),
+                getAdminCards(1, 1000), // Get all cards for client-side filtering
+                getAdminUsers(1, 1000), // Get all users for client-side filtering
             ]);
 
-            // Handle stats data structure
-            if (statsData.stats) {
-                setStats(statsData.stats);
-            } else if (statsData.totalCards !== undefined) {
-                // If statsData is the stats object directly
-                setStats(statsData);
-            } else {
-                console.error('Unexpected stats data structure:', statsData);
-                setError('Invalid stats data received');
-                return;
-            }
-
-            const cards = cardsData.cards || cardsData;
-            setAllCards(cards);
-            setUsers(usersData.users || usersData);
-
-            // Apply frontend filtering
-            applyCardFilter(cards, cardFilter);
+            setStats(statsData.stats || statsData);
+            setAllCards(cardsData.cards || cardsData);
+            setAllUsers(usersData.users || usersData);
         } catch (err) {
-            if (err.message === 'Admin access required') {
-                setError(
-                    'You do not have admin privileges to access this page.'
-                );
-            } else {
-                setError(err.message);
-            }
+            handleError(err);
         } finally {
-            if (isCardFilter) {
-                setCardsLoading(false);
-            } else {
-                setLoading(false);
-            }
+            setLoading(false);
+        }
+    };
+
+    const applyCardFilter = () => {
+        let filtered = [...allCards];
+
+        // Apply status filter
+        if (cardFilter === 'claimed') {
+            filtered = filtered.filter((card) => card.isClaimed);
+        } else if (cardFilter === 'unclaimed') {
+            filtered = filtered.filter((card) => !card.isClaimed);
+        }
+
+        // Apply search filter
+        if (cardSearch) {
+            const searchLower = cardSearch.toLowerCase();
+            filtered = filtered.filter(
+                (card) =>
+                    card.uuid.toLowerCase().includes(searchLower) ||
+                    (card.owner?.name &&
+                        card.owner.name.toLowerCase().includes(searchLower)) ||
+                    (card.owner?.email &&
+                        card.owner.email.toLowerCase().includes(searchLower))
+            );
+        }
+
+        setFilteredCards(filtered);
+    };
+
+    const applyUserFilter = () => {
+        let filtered = [...allUsers];
+
+        // Apply search filter
+        if (userSearch) {
+            const searchLower = userSearch.toLowerCase();
+            filtered = filtered.filter(
+                (user) =>
+                    user.name.toLowerCase().includes(searchLower) ||
+                    user.email.toLowerCase().includes(searchLower)
+            );
+        }
+
+        setFilteredUsers(filtered);
+    };
+
+    const handleError = (err) => {
+        if (err.message === 'Admin access required') {
+            setError('You do not have admin privileges to access this page.');
+        } else {
+            setError(err.message);
         }
     };
 
@@ -118,10 +234,12 @@ export default function AdminDashboard() {
             setError(null);
 
             await createAdminCards(parseInt(cardCount));
-            await loadData(true); // Refresh cards with card loading state
+            await loadData(); // Refresh all data
             setCardCount(10);
+            toast.success('Cards created successfully!');
         } catch (err) {
             setError(err.message);
+            toast.error(err.message);
         } finally {
             setCreatingCards(false);
         }
@@ -141,500 +259,450 @@ export default function AdminDashboard() {
             setError(null);
 
             await deleteAdminCard(uuid);
-            await loadData(true); // Refresh cards with card loading state
+            await loadData(); // Refresh all data
+            toast.success('Card deleted successfully.');
         } catch (err) {
             setError(err.message);
+            toast.error(err.message);
         } finally {
             setDeletingCard(null);
         }
     };
 
-    const applyCardFilter = (cards, filter) => {
-        let filtered;
-        switch (filter) {
-            case 'claimed':
-                filtered = cards.filter((card) => card.isClaimed);
-                break;
-            case 'unclaimed':
-                filtered = cards.filter((card) => !card.isClaimed);
-                break;
-            default: // 'all'
-                filtered = cards;
-                break;
-        }
-        setFilteredCards(filtered);
-    };
-
     const handleCardFilterChange = (filter) => {
         setCardFilter(filter);
-        setCardPage(1);
-        // Apply filter to existing cards without making API call
-        applyCardFilter(allCards, filter);
+    };
+
+    const handleCardSearchChange = (search) => {
+        setCardSearch(search);
+    };
+
+    const handleUserSearchChange = (search) => {
+        setUserSearch(search);
     };
 
     if (authLoading || loading) {
         return <LoadingSpinner />;
     }
 
+    if (error) {
+        return <ErrorPage message={error} />;
+    }
+
     if (!user) {
-        return (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <ErrorPage type={ErrorTypes.AUTH_REQUIRED} />
-            </div>
-        );
-    }
-
-    // Check if user has admin role
-    if (user.role !== 'ADMIN') {
-        return (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <ErrorPage type={ErrorTypes.ADMIN_REQUIRED} />
-            </div>
-        );
-    }
-
-    // Show error for other admin-related issues
-    if (error && error.includes('admin privileges')) {
-        return (
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <ErrorPage type={ErrorTypes.ADMIN_REQUIRED} />
-            </div>
-        );
+        return <ErrorPage message="Please log in to access the admin panel." />;
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-                <div className="mb-6 sm:mb-8">
-                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                        Admin Dashboard
-                    </h1>
-                    <p className="text-gray-600 mt-2 text-sm sm:text-base">
-                        Manage cards, users, and platform statistics
-                    </p>
-                    <div className="mt-2 flex items-center space-x-2 text-xs sm:text-sm text-gray-500">
-                        <Shield className="h-3 w-3 sm:h-4 sm:w-4" />
-                        <span className="truncate">
-                            Logged in as: {user.name} ({user.email}) -{' '}
-                            {user.role}
-                        </span>
-                    </div>
+        <div className="flex h-screen bg-gray-50">
+            <Sidebar
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                isOpen={sidebarOpen}
+                setIsOpen={setSidebarOpen}
+            />
+
+            <main className="flex-1 overflow-y-auto">
+                {/* Mobile header */}
+                <div className="lg:hidden bg-white border-b px-4 py-3 flex items-center justify-between">
+                    <button
+                        onClick={() => setSidebarOpen(true)}
+                        className="p-2 hover:bg-gray-100 rounded-md"
+                    >
+                        <Menu className="h-5 w-5" />
+                    </button>
+                    <h1 className="text-lg font-semibold">Admin Dashboard</h1>
+                    <div className="w-10"></div> {/* Spacer for centering */}
                 </div>
 
-                {error && (
-                    <Alert className="mb-6">
-                        <AlertDescription>{error}</AlertDescription>
-                    </Alert>
-                )}
-
-                {/* Navigation Tabs */}
-                <div className="flex flex-wrap gap-1 bg-white p-1 rounded-lg shadow-sm mb-6">
-                    <Button
-                        variant={activeTab === 'stats' ? 'default' : 'ghost'}
-                        onClick={() => setActiveTab('stats')}
-                        className="flex items-center space-x-2 text-xs sm:text-sm"
-                    >
-                        <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4" />
-                        <span>Statistics</span>
-                    </Button>
-                    <Button
-                        variant={activeTab === 'cards' ? 'default' : 'ghost'}
-                        onClick={() => setActiveTab('cards')}
-                        className="flex items-center space-x-2 text-xs sm:text-sm"
-                    >
-                        <CreditCard className="h-3 w-3 sm:h-4 sm:w-4" />
-                        <span>Cards</span>
-                    </Button>
-                    <Button
-                        variant={activeTab === 'users' ? 'default' : 'ghost'}
-                        onClick={() => setActiveTab('users')}
-                        className="flex items-center space-x-2 text-xs sm:text-sm"
-                    >
-                        <Users className="h-3 w-3 sm:h-4 sm:w-4" />
-                        <span>Users</span>
-                    </Button>
+                <div className="p-4 lg:p-6">
+                    {activeTab === 'stats' && <AdminStats stats={stats} />}
+                    {activeTab === 'cards' && (
+                        <AdminCards
+                            filteredCards={filteredCards}
+                            cardFilter={cardFilter}
+                            handleCardFilterChange={handleCardFilterChange}
+                            cardSearch={cardSearch}
+                            handleCardSearchChange={handleCardSearchChange}
+                            cardCount={cardCount}
+                            setCardCount={setCardCount}
+                            creatingCards={creatingCards}
+                            handleCreateCards={handleCreateCards}
+                            deletingCard={deletingCard}
+                            handleDeleteCard={handleDeleteCard}
+                        />
+                    )}
+                    {activeTab === 'users' && (
+                        <AdminUsers
+                            filteredUsers={filteredUsers}
+                            userSearch={userSearch}
+                            handleUserSearchChange={handleUserSearchChange}
+                        />
+                    )}
                 </div>
+            </main>
+        </div>
+    );
+}
 
-                {/* Statistics Tab */}
-                {activeTab === 'stats' && stats && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-6">
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs sm:text-sm font-medium">
-                                    Total Cards
-                                </CardTitle>
-                                <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-lg sm:text-2xl font-bold">
-                                    {stats.totalCards}
-                                </div>
-                            </CardContent>
-                        </Card>
+const AdminStats = ({ stats }) => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                    Total Cards
+                </CardTitle>
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">
+                    {stats?.totalCards || 0}
+                </div>
+            </CardContent>
+        </Card>
 
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs sm:text-sm font-medium">
-                                    Claimed
-                                </CardTitle>
-                                <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-green-600" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-lg sm:text-2xl font-bold text-green-600">
-                                    {stats.claimedCards}
-                                </div>
-                            </CardContent>
-                        </Card>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                    Claimed Cards
+                </CardTitle>
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">
+                    {stats?.claimedCards || 0}
+                </div>
+            </CardContent>
+        </Card>
 
-                        <Card>
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs sm:text-sm font-medium">
-                                    Unclaimed
-                                </CardTitle>
-                                <CreditCard className="h-3 w-3 sm:h-4 sm:w-4 text-orange-600" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-lg sm:text-2xl font-bold text-orange-600">
-                                    {stats.unclaimedCards}
-                                </div>
-                            </CardContent>
-                        </Card>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                    Total Users
+                </CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">
+                    {stats?.totalUsers || 0}
+                </div>
+            </CardContent>
+        </Card>
 
-                        <Card className="col-span-2 md:col-span-1">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs sm:text-sm font-medium">
-                                    Total Users
-                                </CardTitle>
-                                <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-lg sm:text-2xl font-bold">
-                                    {stats.totalUsers}
-                                </div>
-                            </CardContent>
-                        </Card>
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                    Claim Rate
+                </CardTitle>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+                <div className="text-2xl font-bold">
+                    {stats?.claimRate
+                        ? `${Number(stats.claimRate).toFixed(1)}%`
+                        : '0%'}
+                </div>
+            </CardContent>
+        </Card>
+    </div>
+);
 
-                        <Card className="col-span-2 md:col-span-1">
-                            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                                <CardTitle className="text-xs sm:text-sm font-medium">
-                                    Claim Rate
-                                </CardTitle>
-                                <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-lg sm:text-2xl font-bold">
-                                    {typeof stats.claimRate === 'number'
-                                        ? stats.claimRate.toFixed(1)
-                                        : stats.claimRate || '0.0'}
-                                    %
-                                </div>
-                            </CardContent>
-                        </Card>
+const AdminCards = ({
+    filteredCards,
+    cardFilter,
+    handleCardFilterChange,
+    cardSearch,
+    handleCardSearchChange,
+    cardCount,
+    setCardCount,
+    creatingCards,
+    handleCreateCards,
+    deletingCard,
+    handleDeleteCard,
+}) => {
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+        toast.success('UUID copied to clipboard!');
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Card Creation */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Create New Cards</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                        <Input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={cardCount}
+                            onChange={(e) => setCardCount(e.target.value)}
+                            className="w-full sm:w-32"
+                        />
+                        <Button
+                            onClick={handleCreateCards}
+                            disabled={creatingCards}
+                            className="flex items-center space-x-2 w-full sm:w-auto"
+                        >
+                            <Plus className="h-4 w-4" />
+                            <span>
+                                {creatingCards ? 'Creating...' : 'Create Cards'}
+                            </span>
+                        </Button>
                     </div>
-                )}
+                </CardContent>
+            </Card>
 
-                {/* Cards Tab */}
-                {activeTab === 'cards' && (
-                    <div className="space-y-6">
-                        {/* Create Cards Section */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center space-x-2">
-                                    <Plus className="h-5 w-5" />
-                                    <span>Create New Cards</span>
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex items-center space-x-4">
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        max="100"
-                                        value={cardCount}
-                                        onChange={(e) =>
-                                            setCardCount(e.target.value)
-                                        }
-                                        placeholder="Number of cards"
-                                        className="w-32"
-                                    />
-                                    <Button
-                                        onClick={handleCreateCards}
-                                        disabled={creatingCards}
-                                        className="flex items-center space-x-2"
-                                    >
-                                        {creatingCards ? (
-                                            <RefreshCw className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <Plus className="h-4 w-4" />
-                                        )}
-                                        <span>
-                                            {creatingCards
-                                                ? 'Creating...'
-                                                : 'Create Cards'}
-                                        </span>
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Cards Filter */}
-                        <div className="flex items-center space-x-4">
-                            <Filter className="h-4 w-4 text-gray-500" />
-                            <Button
-                                variant={
-                                    cardFilter === 'all' ? 'default' : 'outline'
+            {/* Card Management */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Manage Cards</CardTitle>
+                    <div className="flex flex-col gap-4 mt-4">
+                        <div className="relative w-full">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                                placeholder="Search by UUID or Owner Name/Email..."
+                                value={cardSearch}
+                                onChange={(e) =>
+                                    handleCardSearchChange(e.target.value)
                                 }
-                                onClick={() => handleCardFilterChange('all')}
-                            >
-                                All Cards
-                            </Button>
-                            <Button
-                                variant={
-                                    cardFilter === 'claimed'
-                                        ? 'default'
-                                        : 'outline'
-                                }
-                                onClick={() =>
-                                    handleCardFilterChange('claimed')
-                                }
-                            >
-                                Claimed
-                            </Button>
-                            <Button
-                                variant={
-                                    cardFilter === 'unclaimed'
-                                        ? 'default'
-                                        : 'outline'
-                                }
-                                onClick={() =>
-                                    handleCardFilterChange('unclaimed')
-                                }
-                            >
-                                Unclaimed
-                            </Button>
+                                className="pl-10"
+                            />
                         </div>
-
-                        {/* Cards List */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                            {cardsLoading ? (
-                                <div className="col-span-full flex justify-center py-8">
-                                    <LoadingSpinner />
-                                </div>
-                            ) : (
-                                filteredCards.map((card) => (
-                                    <Card key={card.uuid} className="text-sm">
-                                        <CardHeader className="pb-3">
-                                            <CardTitle className="text-xs font-mono break-all">
-                                                {card.uuid}
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="space-y-2">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-500">
-                                                    Status:
-                                                </span>
-                                                <span
-                                                    className={`text-xs font-medium ${
+                        <div className="flex items-center space-x-1 rounded-md bg-gray-100 p-1">
+                            {['all', 'claimed', 'unclaimed'].map((filter) => (
+                                <button
+                                    key={filter}
+                                    onClick={() =>
+                                        handleCardFilterChange(filter)
+                                    }
+                                    className={`px-3 py-1 text-sm rounded-md transition-colors flex-1 sm:flex-none ${
+                                        cardFilter === filter
+                                            ? 'bg-white text-gray-900 shadow-sm'
+                                            : 'text-gray-600 hover:text-gray-900'
+                                    }`}
+                                >
+                                    {filter.charAt(0).toUpperCase() +
+                                        filter.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {filteredCards.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                            No cards found matching your criteria.
+                        </div>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>UUID</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="hidden sm:table-cell">
+                                            Claimed By
+                                        </TableHead>
+                                        <TableHead className="text-right">
+                                            Actions
+                                        </TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {filteredCards.map((card) => (
+                                        <TableRow key={card.uuid}>
+                                            <TableCell className="font-mono text-xs sm:text-sm">
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="truncate max-w-20 sm:max-w-32">
+                                                        {card.uuid}
+                                                    </span>
+                                                    <button
+                                                        onClick={() =>
+                                                            copyToClipboard(
+                                                                card.uuid
+                                                            )
+                                                        }
+                                                        className="text-gray-400 hover:text-gray-600 flex-shrink-0"
+                                                    >
+                                                        <Copy className="h-3 w-3" />
+                                                    </button>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge
+                                                    variant={
                                                         card.isClaimed
-                                                            ? 'text-green-600'
-                                                            : 'text-orange-600'
-                                                    }`}
+                                                            ? 'default'
+                                                            : 'secondary'
+                                                    }
+                                                    className="text-xs"
                                                 >
                                                     {card.isClaimed
                                                         ? 'Claimed'
                                                         : 'Unclaimed'}
-                                                </span>
-                                            </div>
-
-                                            {card.owner && (
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-gray-500">
-                                                        Owner:
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell className="hidden sm:table-cell">
+                                                {card.isClaimed &&
+                                                card.owner ? (
+                                                    <div className="flex items-center space-x-2">
+                                                        <Avatar className="h-6 w-6">
+                                                            <AvatarImage
+                                                                src={
+                                                                    card.owner
+                                                                        .picture
+                                                                }
+                                                            />
+                                                            <AvatarFallback>
+                                                                {card.owner.name?.charAt(
+                                                                    0
+                                                                ) || 'U'}
+                                                            </AvatarFallback>
+                                                        </Avatar>
+                                                        <span className="text-sm">
+                                                            {card.owner.name}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400">
+                                                        -
                                                     </span>
-                                                    <span className="text-xs font-medium truncate">
-                                                        {card.owner.name}
-                                                    </span>
-                                                </div>
-                                            )}
-
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-500">
-                                                    Created:
-                                                </span>
-                                                <span className="text-xs">
-                                                    {new Date(
-                                                        card.createdAt
-                                                    ).toLocaleDateString()}
-                                                </span>
-                                            </div>
-
-                                            <div className="flex space-x-2 pt-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        window.open(
-                                                            `/card/${card.uuid}`,
-                                                            '_blank'
-                                                        )
-                                                    }
-                                                    className="flex items-center space-x-1 text-xs h-7 px-2"
-                                                >
-                                                    <Eye className="h-3 w-3" />
-                                                    <span>View</span>
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        handleDeleteCard(
+                                                )}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <Link
+                                                        href={`/card/${card.uuid}`}
+                                                        className="text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        <Eye className="h-4 w-4" />
+                                                    </Link>
+                                                    <button
+                                                        onClick={() =>
+                                                            handleDeleteCard(
+                                                                card.uuid
+                                                            )
+                                                        }
+                                                        disabled={
+                                                            deletingCard ===
                                                             card.uuid
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        deletingCard ===
-                                                        card.uuid
-                                                    }
-                                                    className="flex items-center space-x-1 text-red-600 hover:text-red-700 text-xs h-7 px-2"
-                                                >
-                                                    {deletingCard ===
-                                                    card.uuid ? (
-                                                        <RefreshCw className="h-3 w-3 animate-spin" />
-                                                    ) : (
-                                                        <Trash2 className="h-3 w-3" />
-                                                    )}
-                                                    <span>Delete</span>
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))
-                            )}
+                                                        }
+                                                        className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         </div>
+                    )}
+                    <div className="mt-4 text-sm text-gray-600">
+                        Showing {filteredCards.length} of {filteredCards.length}{' '}
+                        cards
                     </div>
-                )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+};
 
-                {/* Users Tab */}
-                {activeTab === 'users' && (
-                    <div className="space-y-6">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                            {users.map((user) => (
-                                <Card key={user.id} className="text-sm">
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-center space-x-3">
-                                            <Avatar className="h-8 w-8">
+const AdminUsers = ({ filteredUsers, userSearch, handleUserSearchChange }) => {
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Manage Users</CardTitle>
+                <div className="mt-4">
+                    <div className="relative w-full max-w-sm">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <Input
+                            placeholder="Search by name or email..."
+                            value={userSearch}
+                            onChange={(e) =>
+                                handleUserSearchChange(e.target.value)
+                            }
+                            className="pl-10"
+                        />
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                {filteredUsers.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                        No users found matching your criteria.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>User</TableHead>
+                                    <TableHead>Role</TableHead>
+                                    <TableHead className="hidden sm:table-cell">
+                                        Joined
+                                    </TableHead>
+                                    <TableHead>Cards</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {filteredUsers.map((user) => (
+                                    <TableRow key={user.id}>
+                                        <TableCell className="flex items-center space-x-3">
+                                            <Avatar>
                                                 <AvatarImage
                                                     src={user.picture}
-                                                    alt={user.name}
                                                 />
-                                                <AvatarFallback className="text-xs">
+                                                <AvatarFallback>
                                                     {user.name?.charAt(0) ||
                                                         'U'}
                                                 </AvatarFallback>
                                             </Avatar>
-                                            <div className="flex-1 min-w-0">
-                                                <CardTitle className="text-xs font-medium truncate">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-medium truncate">
                                                     {user.name}
-                                                </CardTitle>
-                                                <p className="text-xs text-gray-500 truncate">
+                                                </p>
+                                                <p className="text-sm text-muted-foreground truncate">
                                                     {user.email}
                                                 </p>
                                             </div>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs text-gray-500">
-                                                Role:
-                                            </span>
-                                            <span
-                                                className={`text-xs font-medium px-2 py-1 rounded-full ${
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge
+                                                variant={
                                                     user.role === 'ADMIN'
-                                                        ? 'bg-purple-100 text-purple-800'
-                                                        : 'bg-gray-100 text-gray-800'
-                                                }`}
+                                                        ? 'default'
+                                                        : 'secondary'
+                                                }
+                                                className="text-xs"
                                             >
                                                 {user.role}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs text-gray-500">
-                                                Cards:
-                                            </span>
-                                            <span className="text-xs font-medium">
-                                                {user._count?.claimedCards || 0}
-                                            </span>
-                                        </div>
-
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs text-gray-500">
-                                                Joined:
-                                            </span>
-                                            <span className="text-xs">
-                                                {new Date(
-                                                    user.createdAt
-                                                ).toLocaleDateString()}
-                                            </span>
-                                        </div>
-
-                                        {user.claimedCards &&
-                                            user.claimedCards.length > 0 && (
-                                                <div className="pt-2">
-                                                    <span className="text-xs text-gray-500">
-                                                        Claimed Cards:
-                                                    </span>
-                                                    <div className="mt-1 space-y-1">
-                                                        {user.claimedCards
-                                                            .slice(0, 3)
-                                                            .map((card) => (
-                                                                <div
-                                                                    key={
-                                                                        card.uuid
-                                                                    }
-                                                                    className="flex items-center justify-between"
-                                                                >
-                                                                    <span className="text-xs font-mono truncate flex-1 mr-2">
-                                                                        {
-                                                                            card.uuid
-                                                                        }
-                                                                    </span>
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        size="sm"
-                                                                        onClick={() =>
-                                                                            window.open(
-                                                                                `/card/${card.uuid}`,
-                                                                                '_blank'
-                                                                            )
-                                                                        }
-                                                                        className="h-6 px-2 flex-shrink-0"
-                                                                    >
-                                                                        <Eye className="h-3 w-3" />
-                                                                    </Button>
-                                                                </div>
-                                                            ))}
-                                                        {user.claimedCards
-                                                            .length > 3 && (
-                                                            <div className="text-xs text-gray-500 text-center">
-                                                                +
-                                                                {user
-                                                                    .claimedCards
-                                                                    .length -
-                                                                    3}{' '}
-                                                                more
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="hidden sm:table-cell">
+                                            {new Date(
+                                                user.createdAt
+                                            ).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell>
+                                            {user._count?.claimedCards || 0}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
                     </div>
                 )}
-            </div>
-        </div>
+                <div className="mt-4 text-sm text-gray-600">
+                    Showing {filteredUsers.length} of {filteredUsers.length}{' '}
+                    users
+                </div>
+            </CardContent>
+        </Card>
     );
-}
+};
