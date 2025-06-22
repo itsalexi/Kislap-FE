@@ -7,6 +7,7 @@ import {
     renderSocialIcon,
 } from '../lib/socialIcons';
 import { ExternalLink } from 'lucide-react';
+import Image from 'next/image';
 
 const CardPreview = ({ cardData }) => {
     if (!cardData) {
@@ -26,10 +27,13 @@ const CardPreview = ({ cardData }) => {
             {/* Banner Image */}
             {bannerPicture ? (
                 <div className="h-32 sm:h-40 bg-gray-200">
-                    <img
+                    <Image
                         src={bannerPicture}
                         alt="Card Banner"
                         className="w-full h-full object-cover"
+                        fill
+                        sizes="(max-width: 640px) 100vw, 100vw"
+                        priority
                     />
                 </div>
             ) : (
@@ -46,10 +50,13 @@ const CardPreview = ({ cardData }) => {
                 >
                     <div className="relative">
                         {profilePicture ? (
-                            <img
+                            <Image
                                 src={profilePicture}
                                 alt="Profile"
                                 className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white shadow-lg object-cover"
+                                width={128}
+                                height={128}
+                                priority
                             />
                         ) : (
                             <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-100 rounded-full border-4 border-white shadow-lg flex items-center justify-center">

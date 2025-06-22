@@ -49,6 +49,7 @@ import ReactCrop, {
 } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 // Validation schema
 const validationSchema = Yup.object().shape({
@@ -211,12 +212,15 @@ const ImageCropModal = ({
                         aspect={aspect}
                         circularCrop={circularCrop}
                     >
-                        <img
+                        <Image
                             ref={imgRef}
-                            alt="Crop me"
+                            alt="Crop image"
                             src={imageSrc}
                             onLoad={onImageLoad}
                             className="max-h-[60vh] max-w-full object-contain"
+                            width={600}
+                            height={200}
+                            priority
                         />
                     </ReactCrop>
                 </div>
@@ -224,7 +228,7 @@ const ImageCropModal = ({
                     <Button variant="outline" onClick={onClose}>
                         Cancel
                     </Button>
-                    <Button onClick={handleCrop}>Crop & Upload</Button>
+                    <Button onClick={handleCrop}>Crop &amp; Upload</Button>
                 </div>
             </div>
         </div>
@@ -416,10 +420,13 @@ export default function EditCardPage({ params }) {
                 <div className="relative">
                     <div className="relative group w-full aspect-[3/1] bg-gray-100 rounded-md overflow-hidden">
                         {bannerUrl ? (
-                            <img
+                            <Image
                                 src={bannerUrl}
                                 alt="Banner preview"
                                 className="w-full h-full object-cover"
+                                fill
+                                sizes="(max-width: 640px) 100vw, 100vw"
+                                priority
                             />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-500">
@@ -467,10 +474,13 @@ export default function EditCardPage({ params }) {
                     <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-white shadow-lg group">
                         <div className="w-full h-full rounded-full bg-gray-100 overflow-hidden">
                             {profileUrl ? (
-                                <img
+                                <Image
                                     src={profileUrl}
                                     alt="Profile preview"
                                     className="w-full h-full object-cover"
+                                    width={112}
+                                    height={112}
+                                    priority
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center">

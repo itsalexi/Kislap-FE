@@ -12,8 +12,9 @@ import {
     CardContent,
 } from './components/ui/card.jsx';
 import { CreditCard, Shield, BarChart3 } from 'lucide-react';
+import { Suspense } from 'react';
 
-export default function Home() {
+function HomeContent() {
     const { user, login, loading } = useAuth();
     const searchParams = useSearchParams();
     const error = searchParams.get('error');
@@ -179,5 +180,13 @@ export default function Home() {
                 </div>
             </div>
         </div>
+    );
+}
+
+export default function Home() {
+    return (
+        <Suspense fallback={<LoadingSpinner message="Loading..." />}>
+            <HomeContent />
+        </Suspense>
     );
 }

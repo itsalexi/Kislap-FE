@@ -124,7 +124,7 @@ export default function Dashboard() {
                                 {stats.claimedCards}
                             </div>
                             <p className="text-xs text-gray-500">
-                                Cards you've claimed
+                                Cards you&apos;ve claimed
                             </p>
                         </CardContent>
                     </Card>
@@ -178,7 +178,7 @@ export default function Dashboard() {
                             <CardContent className="text-center py-8">
                                 <CreditCard className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                                 <p className="text-gray-500">
-                                    You haven't claimed any cards yet.
+                                    You haven&apos;t claimed any cards yet.
                                 </p>
                                 <p className="text-sm text-gray-400 mt-2">
                                     Use the form above to claim your first card!
