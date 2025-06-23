@@ -119,31 +119,45 @@ export default function OnboardingPage({ params }) {
       setLoading(true);
       setError(null);
 
-      const claimResult = await claimCard(uuid);
-      if (claimResult.error) {
-        // If it's already claimed by this user, that's fine - we can proceed
-        if (claimResult.error !== 'Card already claimed by this user') {
-          // If it's claimed by another user, show an error
-          setError('This card is already claimed by another user.');
-          return;
-        }
-        // If it's claimed by this user, we can proceed to load the card
-      }
-
+      // First, try to get the card data to see if user already owns it
       const result = await getCardByUuid(uuid);
 
       if (result.error) {
         setError(result.error);
-      } else if (result.claimed && result.card) {
-        if (result.card.owner?.id !== user.id) {
-          setError('You do not have permission to set up this card.');
+        return;
+      }
+
+      if (result.claimed && result.card) {
+        // Card is claimed, check if current user owns it
+        if (result.card.owner?.id === user.id) {
+          // User already owns this card, proceed with setup
+          setCardData(result.card);
+          return;
+        } else {
+          // Card is claimed by another user
+          setError('This card is already claimed by another user.');
           return;
         }
-        setCardData(result.card);
+      }
+
+      // Card is not claimed, try to claim it
+      const claimResult = await claimCard(uuid);
+      if (claimResult.error) {
+        setError(claimResult.error);
+        return;
+      }
+
+      // Card was successfully claimed, get the updated data
+      const updatedResult = await getCardByUuid(uuid);
+      if (updatedResult.error) {
+        setError(updatedResult.error);
+      } else if (updatedResult.claimed && updatedResult.card) {
+        setCardData(updatedResult.card);
       } else {
         setError('This card is not available to be claimed.');
       }
     } catch (err) {
+      console.error('Error in loadAndClaimCard:', err);
       setError('Failed to load card data.');
     } finally {
       setLoading(false);
