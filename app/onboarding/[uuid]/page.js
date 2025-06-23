@@ -498,10 +498,6 @@ export default function OnboardingPage({ params }) {
                   </Button>
                 )}
               </div>
-              <div className="text-xs text-gray-400 text-center mt-2">
-                Debug: Step {currentStep + 1} of {steps.length} -{' '}
-                {steps[currentStep].title}
-              </div>
             </footer>
           </Form>
         );

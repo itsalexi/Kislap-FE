@@ -280,7 +280,21 @@ export default function CardImageUploader({
   return (
     <div className="bg-white p-6 rounded-lg shadow-sm border space-y-4">
       <h2 className="text-lg font-semibold">Card Images</h2>
-      <div>
+      <div className="relative">
+        {/* Loading overlay */}
+        {(isBannerUploading || isProfileUploading) && (
+          <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10 rounded-lg">
+            <div className="text-center">
+              <LoadingSpinner />
+              <p className="text-sm text-gray-600 mt-2">
+                {isBannerUploading
+                  ? 'Uploading banner...'
+                  : 'Uploading profile picture...'}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="relative">
           <div className="relative group w-full aspect-[3/1] bg-gray-100 rounded-md overflow-hidden">
             {bannerUrl ? (
