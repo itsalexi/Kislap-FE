@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Formik, Form } from 'formik';
@@ -114,18 +114,20 @@ export default function OnboardingPage({ params }) {
     };
   };
 
-  const loadAndClaimCard = async () => {
+  const loadAndClaimCard = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       const claimResult = await claimCard(uuid);
-      if (
-        claimResult.error &&
-        claimResult.error !== 'Card already claimed by this user'
-      ) {
-        // If it's already claimed by another user, we should probably show an error.
-        // For now, we'll let it proceed and the getCardByUuid will show the permissions error.
+      if (claimResult.error) {
+        // If it's already claimed by this user, that's fine - we can proceed
+        if (claimResult.error !== 'Card already claimed by this user') {
+          // If it's claimed by another user, show an error
+          setError('This card is already claimed by another user.');
+          return;
+        }
+        // If it's claimed by this user, we can proceed to load the card
       }
 
       const result = await getCardByUuid(uuid);
@@ -146,7 +148,7 @@ export default function OnboardingPage({ params }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [uuid, user?.id]);
 
   useEffect(() => {
     if (!authLoading && user) {
@@ -154,7 +156,7 @@ export default function OnboardingPage({ params }) {
     } else if (!authLoading && !user) {
       router.push(`/api/auth/google?redirect=/onboarding/${uuid}`);
     }
-  }, [authLoading, user, uuid, loadAndClaimCard, router]);
+  }, [authLoading, user, uuid, loadAndClaimCard]);
 
   const handleSubmit = async (values, { setSubmitting }) => {
     const promise = () =>
