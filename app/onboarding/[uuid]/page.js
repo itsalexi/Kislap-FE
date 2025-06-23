@@ -291,7 +291,6 @@ export default function OnboardingPage({ params }) {
         const handleNext = async () => {
           const currentStepFields = steps[currentStep].fields;
           if (currentStepFields.length > 0) {
-            // Mark current fields as touched to ensure error messages appear
             const touchedObject = {};
             currentStepFields.forEach((field) => {
               const fieldPath = field.split('.');
@@ -306,8 +305,42 @@ export default function OnboardingPage({ params }) {
 
             const validationErrors = await validateForm();
 
+            // Helper function to extract the first string error from a field
+            const getFirstStringError = (field) => {
+              const error = getIn(validationErrors, field);
+              if (!error) return null;
+
+              // If it's a string, return it directly
+              if (typeof error === 'string') return error;
+
+              // If it's an array (like socialLinks or otherLinks), find the first string error
+              if (Array.isArray(error)) {
+                for (let i = 0; i < error.length; i++) {
+                  const itemError = error[i];
+                  if (typeof itemError === 'string') return itemError;
+                  if (itemError && typeof itemError === 'object') {
+                    // Check for nested string errors in the object
+                    const nestedError = Object.values(itemError).find(
+                      (val) => typeof val === 'string'
+                    );
+                    if (nestedError) return nestedError;
+                  }
+                }
+              }
+
+              // If it's an object, find the first string value
+              if (error && typeof error === 'object') {
+                const stringError = Object.values(error).find(
+                  (val) => typeof val === 'string'
+                );
+                if (stringError) return stringError;
+              }
+
+              return null;
+            };
+
             const firstError = currentStepFields
-              .map((field) => getIn(validationErrors, field))
+              .map((field) => getFirstStringError(field))
               .find(Boolean);
 
             if (firstError) {
