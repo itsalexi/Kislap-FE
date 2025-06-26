@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { use } from 'react';
-import { useRouter } from 'next/navigation';
-import { Formik, Form } from 'formik';
-import * as Yup from 'yup';
-import { getCardByUuid, updateCard, claimCard } from '../../lib/cards';
-import { useAuth } from '../../components/AuthProvider';
-import LoadingSpinner from '../../components/LoadingSpinner';
-import ErrorPage, { ErrorTypes } from '../../components/ErrorPage';
-import { Button } from '../../components/ui/button';
-import { Progress } from '../../components/ui/progress';
+import { useState, useEffect, useCallback } from "react";
+import { use } from "react";
+import { useRouter } from "next/navigation";
+import { Formik, Form } from "formik";
+import * as Yup from "yup";
+import { getCardByUuid, updateCard, claimCard } from "../../lib/cards";
+import { useAuth } from "../../components/AuthProvider";
+import LoadingSpinner from "../../components/LoadingSpinner";
+import ErrorPage, { ErrorTypes } from "../../components/ErrorPage";
+import { Button } from "../../components/ui/button";
+import { Progress } from "../../components/ui/progress";
 import {
   ArrowLeft,
   ArrowRight,
@@ -21,29 +21,29 @@ import {
   Quote,
   Share2,
   Link as LinkIcon,
-} from 'lucide-react';
-import { toast } from 'sonner';
+} from "lucide-react";
+import { toast } from "sonner";
 
-import CardImageUploader from '../../components/CardEditor/CardImageUploader.js';
-import ContactInfoForm from '../../components/CardEditor/ContactInfoForm.js';
-import BioForm from '../../components/CardEditor/BioForm.js';
-import SocialLinksForm from '../../components/CardEditor/SocialLinksForm.js';
-import OtherLinksForm from '../../components/CardEditor/OtherLinksForm.js';
-import CardView from '../../components/CardView';
-import { getIn } from 'formik';
+import CardImageUploader from "../../components/CardEditor/CardImageUploader.js";
+import ContactInfoForm from "../../components/CardEditor/ContactInfoForm.js";
+import BioForm from "../../components/CardEditor/BioForm.js";
+import SocialLinksForm from "../../components/CardEditor/SocialLinksForm.js";
+import OtherLinksForm from "../../components/CardEditor/OtherLinksForm.js";
+import CardView from "../../components/CardView";
+import { getIn } from "formik";
 
 const steps = [
-  { id: 'welcome', title: 'Welcome', fields: [] },
+  { id: "welcome", title: "Welcome", fields: [] },
   {
-    id: 'contact',
-    title: 'Contact Info',
-    fields: ['contactInfo.name', 'contactInfo.email'],
+    id: "contact",
+    title: "Contact Info",
+    fields: ["contactInfo.name", "contactInfo.email"],
   },
-  { id: 'images', title: 'Profile Images', fields: [] },
-  { id: 'bio', title: 'Your Bio', fields: ['bio'] },
-  { id: 'socials', title: 'Social Links', fields: ['socialLinks'] },
-  { id: 'links', title: 'Other Links', fields: ['otherLinks'] },
-  { id: 'review', title: 'Review & Finish', fields: [] },
+  { id: "images", title: "Profile Images", fields: [] },
+  { id: "bio", title: "Your Bio", fields: ["bio"] },
+  { id: "socials", title: "Social Links", fields: ["socialLinks"] },
+  { id: "links", title: "Other Links", fields: ["otherLinks"] },
+  { id: "review", title: "Review & Finish", fields: [] },
 ];
 
 const validationSchema = Yup.object().shape({
@@ -51,34 +51,34 @@ const validationSchema = Yup.object().shape({
     name: Yup.string()
       .min(1)
       .max(100)
-      .required('Your name is required to get started.'),
+      .required("Your name is required to get started."),
     title: Yup.string().max(100),
     company: Yup.string().max(100),
-    email: Yup.string().email('Please enter a valid email.'),
+    email: Yup.string().email("Please enter a valid email."),
     phone: Yup.string().matches(
       /^(|[\+]?[0-9][\d]{0,15})$/,
-      'Please enter a valid phone number.'
+      "Please enter a valid phone number."
     ),
-    website: Yup.string().url('Please enter a valid URL.'),
+    website: Yup.string().url("Please enter a valid URL."),
     address: Yup.string().max(200),
   }),
   bio: Yup.string().max(1000),
   socialLinks: Yup.array()
     .of(
       Yup.object().shape({
-        platform: Yup.string().required('Platform is required.'),
+        platform: Yup.string().required("Platform is required."),
         url: Yup.string()
-          .url('Link must be a valid URL.')
-          .required('URL is required.'),
+          .url("Link must be a valid URL.")
+          .required("URL is required."),
       })
     )
-    .max(5, 'You can add a maximum of 5 social links.'),
+    .max(5, "You can add a maximum of 5 social links."),
   otherLinks: Yup.array().of(
     Yup.object().shape({
-      title: Yup.string().required('Title is required.'),
+      title: Yup.string().required("Title is required."),
       url: Yup.string()
-        .url('Link must be a valid URL.')
-        .required('URL is required.'),
+        .url("Link must be a valid URL.")
+        .required("URL is required."),
     })
   ),
 });
@@ -100,15 +100,15 @@ export default function OnboardingPage({ params }) {
       profilePicture: data?.profilePicture || null,
       bannerPicture: data?.bannerPicture || null,
       contactInfo: {
-        name: contactInfo.name || '',
-        title: contactInfo.title || '',
-        company: contactInfo.company || '',
-        email: contactInfo.email || '',
-        phone: contactInfo.phone || '',
-        website: contactInfo.website || '',
-        address: contactInfo.address || '',
+        name: contactInfo.name || "",
+        title: contactInfo.title || "",
+        company: contactInfo.company || "",
+        email: contactInfo.email || "",
+        phone: contactInfo.phone || "",
+        website: contactInfo.website || "",
+        address: contactInfo.address || "",
       },
-      bio: data?.bio || '',
+      bio: data?.bio || "",
       socialLinks: data?.socialLinks || [],
       otherLinks: data?.otherLinks || [],
     };
@@ -135,7 +135,7 @@ export default function OnboardingPage({ params }) {
           return;
         } else {
           // Card is claimed by another user
-          setError('This card is already claimed by another user.');
+          setError("This card is already claimed by another user.");
           return;
         }
       }
@@ -154,11 +154,11 @@ export default function OnboardingPage({ params }) {
       } else if (updatedResult.claimed && updatedResult.card) {
         setCardData(updatedResult.card);
       } else {
-        setError('This card is not available to be claimed.');
+        setError("This card is not available to be claimed.");
       }
     } catch (err) {
-      console.error('Error in loadAndClaimCard:', err);
-      setError('Failed to load card data.');
+      console.error("Error in loadAndClaimCard:", err);
+      setError("Failed to load card data.");
     } finally {
       setLoading(false);
     }
@@ -222,12 +222,12 @@ export default function OnboardingPage({ params }) {
       });
 
     toast.promise(promise(), {
-      loading: 'Saving your card...',
+      loading: "Saving your card...",
       success: () => {
         setTimeout(() => router.push(`/card/${uuid}`), 1000);
-        return 'Your card is ready!';
+        return "Your card is ready!";
       },
-      error: (err) => err.message || 'Failed to save card.',
+      error: (err) => err.message || "Failed to save card.",
     });
   };
 
@@ -237,13 +237,13 @@ export default function OnboardingPage({ params }) {
   const handleDragStart = (e, index, type) => {
     setDraggedItem(index);
     setDraggedType(type);
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = "move";
   };
   const handleDragOver = (e) => e.preventDefault();
   const handleDrop = (e, dropIndex, type, values, setFieldValue) => {
     e.preventDefault();
     if (draggedType !== type || draggedItem === null) return;
-    const listKey = type === 'social' ? 'socialLinks' : 'otherLinks';
+    const listKey = type === "social" ? "socialLinks" : "otherLinks";
     const updated = [...values[listKey]];
     const [moved] = updated.splice(draggedItem, 1);
     if (moved) updated.splice(dropIndex, 0, moved);
@@ -293,7 +293,7 @@ export default function OnboardingPage({ params }) {
           if (currentStepFields.length > 0) {
             const touchedObject = {};
             currentStepFields.forEach((field) => {
-              const fieldPath = field.split('.');
+              const fieldPath = field.split(".");
               let current = touchedObject;
               for (let i = 0; i < fieldPath.length - 1; i++) {
                 current[fieldPath[i]] = current[fieldPath[i]] || {};
@@ -311,17 +311,17 @@ export default function OnboardingPage({ params }) {
               if (!error) return null;
 
               // If it's a string, return it directly
-              if (typeof error === 'string') return error;
+              if (typeof error === "string") return error;
 
               // If it's an array (like socialLinks or otherLinks), find the first string error
               if (Array.isArray(error)) {
                 for (let i = 0; i < error.length; i++) {
                   const itemError = error[i];
-                  if (typeof itemError === 'string') return itemError;
-                  if (itemError && typeof itemError === 'object') {
+                  if (typeof itemError === "string") return itemError;
+                  if (itemError && typeof itemError === "object") {
                     // Check for nested string errors in the object
                     const nestedError = Object.values(itemError).find(
-                      (val) => typeof val === 'string'
+                      (val) => typeof val === "string"
                     );
                     if (nestedError) return nestedError;
                   }
@@ -329,9 +329,9 @@ export default function OnboardingPage({ params }) {
               }
 
               // If it's an object, find the first string value
-              if (error && typeof error === 'object') {
+              if (error && typeof error === "object") {
                 const stringError = Object.values(error).find(
-                  (val) => typeof val === 'string'
+                  (val) => typeof val === "string"
                 );
                 if (stringError) return stringError;
               }
@@ -360,7 +360,7 @@ export default function OnboardingPage({ params }) {
               <div className="max-w-4xl mx-auto">
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-medium text-gray-500 w-28 shrink-0">
-                    Step {currentStep + 1} of {steps.length}:{' '}
+                    Step {currentStep + 1} of {steps.length}:{" "}
                     {steps[currentStep].title}
                   </span>
                   <Progress value={progress} className="w-full" />
@@ -374,7 +374,7 @@ export default function OnboardingPage({ params }) {
                   <div className="text-center space-y-4">
                     <Wand2 className="mx-auto h-12 w-12 text-blue-500" />
                     <h1 className="text-3xl font-bold text-gray-900">
-                      Welcome, {user.name || 'there'}!
+                      Welcome, {user.name || "there"}!
                     </h1>
                     <p className="text-lg text-gray-600">
                       Let&apos;s set up your new digital business card.
@@ -521,11 +521,7 @@ export default function OnboardingPage({ params }) {
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Button>
                 ) : (
-                  <Button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSubmitting}
-                  >
+                  <Button type="submit" disabled={isSubmitting}>
                     <PartyPopper className="h-4 w-4 mr-2" />
                     Finish Setup
                   </Button>
